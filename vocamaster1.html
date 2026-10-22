@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High School English Voca Quiz Challenge</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- JS Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;600;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        .font-jua {
+            font-family: 'Jua', sans-serif;
+        }
+        
+        .animate-bounce-short {
+            animation: bounce 0.5s ease infinite alternate;
+        }
+        
+        @keyframes bounce {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-8px); }
+        }
+
+        .animate-shake {
+            animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 0, 0); }
+            20%, 80% { transform: translate3d(4px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+            40%, 60% { transform: translate3d(6px, 0, 0); }
+        }
+
+        .pulse-glow {
+            box-shadow: 0 0 15px rgba(251, 191, 36, 0.6);
+        }
+    </style>
+
+    <script>
+        let currentSetKey = null;
+        let currentQuestions = [];
+        let currentIdx = 0;
+        let score = 0;
+        let attemptsCount = 0;
+        let wrongAttemptsPerQuestion = 0;
+        let timer = null;
+        let timeLeft = 10;
+        let audioCtx = null;
+        let isMuted = false;
+        let bgmInterval = null;
+        let studentName = "";
+        let startTime = null;
+
+        const QUIZ_SETS = {
+            textbook: {
+                title: "교과서 Lesson 2. Scientific Discovery (20문항)",
+                badge: "교과서 어휘",
+                questions: [
+                    { word: "domain", type: "교과서 어휘", context: "Science is no longer a domain reserved exclusively for professional scientists.", meaning: "영역, 분야", options: ["영역, 분야", "실험실", "과정", "목적"] },
+                    { word: "reserve", type: "교과서 어휘", context: "...a domain reserved exclusively for professional scientists.", meaning: "지정하다, 따로 잡아 두다", options: ["지정하다, 따로 잡아 두다", "파괴하다", "발명하다", "감추다"] },
+                    { word: "exclusively", type: "교과서 어휘", context: "...a domain reserved exclusively for professional scientists.", meaning: "오로지, 독점적으로", options: ["오로지, 독점적으로", "우연히", "공동으로", "일시적으로"] },
+                    { word: "perception", type: "교과서 어휘", context: "However, this perception is far from the truth.", meaning: "인식, 지각", options: ["인식, 지각", "오해", "실험 결과", "상상력"] },
+                    { word: "advancement", type: "교과서 어휘", context: "Ordinary people have contributed to scientific advancements.", meaning: "발전, 진보", options: ["발전, 진보", "퇴보", "장애", "연구소"] },
+                    { word: "numerous", type: "교과서 어휘", context: "There are numerous examples of citizen science projects.", meaning: "수많은, 다수의", options: ["수많은, 다수의", "희귀한", "복잡한", "미미한"] },
+                    { word: "accomplishment", type: "교과서 어휘", context: "...making remarkable scientific accomplishments.", meaning: "성취, 업적", options: ["성취, 업적", "실패", "시도", "계획"] },
+                    { word: "classify", type: "교과서 어휘", context: "Volunteers helped classify millions of galaxy images.", meaning: "분류[구분]하다", options: ["분류[구분]하다", "촬영하다", "삭제하다", "발송하다"] },
+                    { word: "astronomy", type: "교과서 어휘", context: "Citizen scientists made major contributions to astronomy.", meaning: "천문학", options: ["천문학", "지질학", "생물학", "물리학"] },
+                    { word: "evolution", type: "교과서 어휘", context: "...understanding the evolution of galaxies over time.", meaning: "진화, 발전", options: ["진화, 발전", "소멸", "정체", "분열"] },
+                    { word: "dull", type: "교과서 어휘", context: "...his job there was dull and time-consuming.", meaning: "따분한, 지루한", options: ["따분한, 지루한", "화려한", "위험한", "신나는"] },
+                    { word: "tremendous", type: "교과서 어휘", context: "This required a tremendous amount of time and effort.", meaning: "엄청난, 거대한", options: ["엄청난, 거대한", "사소한", "불안정한", "적절한"] },
+                    { word: "turn to", type: "교과서 숙어", context: "He decided to turn to the public for help.", meaning: "~에 의지하다, 도움을 청하다", options: ["~에 의지하다, 도움을 청하다", "~를 거절하다", "~를 비판하다", "~를 멀리하다"] },
+                    { word: "end up", type: "교과서 숙어", context: "They ended up launching a massive crowdsourced project.", meaning: "결국 ~하게 되다", options: ["결국 ~하게 되다", "시작부터 포기하다", "갑자기 중단하다", "반대로 실행하다"] },
+                    { word: "launch", type: "교과서 어휘", context: "They launched an online platform for global volunteers.", meaning: "시작하다, 개시하다", options: ["시작하다, 개시하다", "종료하다", "검토하다", "수정하다"] },
+                    { word: "participate", type: "교과서 어휘", context: "Thousands of people volunteered to participate in the study.", meaning: "참가[참여]하다", options: ["참가[참여]하다", "관조하다", "거부하다", "주도하다"] },
+                    { word: "brief", type: "교과서 어휘", context: "Participants were given a brief tutorial before starting.", meaning: "간단한, 짧은", options: ["간단한, 짧은", "장황한", "복잡한", "엄격한"] },
+                    { word: "tutorial", type: "교과서 어휘", context: "The website provided a simple tutorial for classification.", meaning: "사용 지침, 개별 지도", options: ["사용 지침, 개별 지도", "시험 문제", "최종 평가", "설문 조사"] },
+                    { word: "sort", type: "교과서 어휘", context: "Users were asked to sort images based on shape.", meaning: "분류하다", options: ["분류하다", "제작하다", "확대하다", "복사하다"] },
+                    { word: "individually", type: "교과서 어휘", context: "Each image was checked individually by multiple users.", meaning: "개별적으로, 각각 따로", options: ["개별적으로, 각각 따로", "집단으로", "무작위로", "동시에"] }
+                ]
+            },
+            reading_1: {
+                title: "독해 1세트: 소셜미디어 / 몰입 / 언어학습 (20문항)",
+                badge: "독해 Part 1",
+                questions: [
+                    { word: "vessel", type: "독해어휘", context: "...social media is just an empty vessel waiting for input...", meaning: "용기, 그릇", options: ["용기, 그릇", "무기", "장애물", "결과물"] },
+                    { word: "confuse A with B", type: "독해숙어", context: "...we easily confuse motion with meaningful progress...", meaning: "A와 B를 혼동하다", options: ["A와 B를 혼동하다", "A를 B로 교환하다", "A와 B를 비교하다", "A를 B에서 제외하다"] },
+                    { word: "performance of urgency", type: "독해숙어", context: "Working constantly can be just a performance of urgency.", meaning: "실제 진전 없이 바쁜 척하기", options: ["실제 진전 없이 바쁜 척하기", "긴급 상황 해결", "철저한 업무 분담", "장기적 목표 달성"] },
+                    { word: "constructive", type: "독해어휘", context: "...view errors as a constructive part of language acquisition.", meaning: "건설적인, 발전적인", options: ["건설적인, 발전적인", "파괴적인", "지루한", "비관적인"] },
+                    { word: "discourage", type: "독해어휘", context: "Good learners are not discouraged by unexpected mistakes.", meaning: "낙담시키다, 좌절시키다", options: ["낙담시키다, 좌절시키다", "격려하다", "칭찬하다", "도전시키다"] },
+                    { word: "maintain focus", type: "독해숙어", context: "Constant notifications make it hard to maintain focus.", meaning: "집중력을 유지하다", options: ["집중력을 유지하다", "집중력을 잃다", "관심을 돌리다", "목표를 변경하다"] },
+                    { word: "stillness", type: "독해어휘", context: "We forget that stillness can be strategic for deep thought.", meaning: "고요함, 정적", options: ["고요함, 정적", "소란함", "속도감", "움직임"] },
+                    { word: "principle", type: "독해어휘", context: "The same principle applies to developing artistic skills.", meaning: "원칙, 원리", options: ["원칙, 원리", "편견", "우연", "결과"] },
+                    { word: "skim through", type: "독해숙어", context: "We skim through endless feeds without processing meaning.", meaning: "대충 훑어보다", options: ["대충 훑어보다", "정독하다", "삭제하다", "작성하다"] },
+                    { word: "insight", type: "독해어휘", context: "Taking a step back often leads to greater insight.", meaning: "통찰력, 안목", options: ["통찰력, 안목", "실수", "피로감", "경쟁심"] },
+                    { word: "acquisition", type: "독해어휘", context: "Errors are natural steps in language acquisition.", meaning: "습득, 획득", options: ["습득, 획득", "망각", "포기", "거부"] },
+                    { word: "distraction", type: "독해어휘", context: "Digital devices cause constant cognitive distraction.", meaning: "주의 산만, 방해 요소", options: ["주의 산만, 방해 요소", "집중력", "몰입", "창의성"] },
+                    { word: "illusion", type: "독해어휘", context: "Busyness creates an illusion of productivity.", meaning: "환상, 착각", options: ["환상, 착각", "진실", "증명", "확신"] },
+                    { word: "deliberate", type: "독해어휘", context: "Deep learning requires deliberate and sustained effort.", meaning: "의도적인, 신중한", options: ["의도적인, 신중한", "우연한", "충동적인", "성급한"] },
+                    { word: "overwhelm", type: "독해어휘", context: "Excessive notification streams overwhelm our senses.", meaning: "압도하다, 당황하게 하다", options: ["압도하다, 당황하게 하다", "위로하다", "단련하다", "해방하다"] },
+                    { word: "engagement", type: "독해어휘", context: "True learning demands active intellectual engagement.", meaning: "참여, 몰입", options: ["참여, 몰입", "회피", "방관", "중단"] },
+                    { word: "superficial", type: "독해어휘", context: "Skimming results in superficial understanding.", meaning: "피상적인, 겉핥기의", options: ["피상적인, 겉핥기의", "깊이 있는", "근본적인", "완벽한"] },
+                    { word: "retain", type: "독해어휘", context: "Pause regularly to retain important information better.", meaning: "보유하다, 기억하다", options: ["보유하다, 기억하다", "잊어버리다", "버리다", "수정하다"] },
+                    { word: "stimulate", type: "독해어휘", context: "Curiosity helps stimulate deeper mental exploration.", meaning: "자극하다, 격려하다", options: ["자극하다, 격려하다", "억제하다", "진정시키다", "방해하다"] },
+                    { word: "resilience", type: "독해어휘", context: "Overcoming language barriers builds psychological resilience.", meaning: "회복 탄력성, 회복력", options: ["회복 탄력성, 회복력", "취약성", "고립", "무력감"] }
+                ]
+            },
+            reading_2: {
+                title: "독해 2세트: 산악 안전 / 소통 / 반려동물 (20문항)",
+                badge: "독해 Part 2",
+                questions: [
+                    { word: "acceptable", type: "독해어휘", context: "...keeping the risk of falling to acceptable levels.", meaning: "수용할 수 있는, 용인되는", options: ["수용할 수 있는, 용인되는", "위험천용한", "거부되는", "예측불가능한"] },
+                    { word: "assessment", type: "독해어휘", context: "Rely on an accurate assessment of your physical limits.", meaning: "평가, 판단", options: ["평가, 판단", "기억", "자랑", "상상"] },
+                    { word: "ultimatum", type: "독해어휘", context: "Instead of listening, parents often issue an ultimatum.", meaning: "최후통첩", options: ["최후통첩", "초대장", "칭찬", "사과"] },
+                    { word: "rebellion", type: "독해어휘", context: "Strict demands may lead children toward open rebellion.", meaning: "반항, 반란", options: ["반항, 반란", "복종", "협력", "양보"] },
+                    { word: "nonjudgmental", type: "독해어휘", context: "Pets provide nonjudgmental companionship to owners.", meaning: "비판하지 않는, 무비판적인", options: ["비판하지 않는, 무비판적인", "비판적인", "공격적인", "까다로운"] },
+                    { word: "compelled", type: "독해어휘", context: "People feel compelled to justify their choices to others.", meaning: "강요당하는, 어쩔 수 없이 ~하는", options: ["강요당하는, 어쩔 수 없이 ~하는", "자유로운", "즐거워하는", "망설이는"] },
+                    { word: "rationalize", type: "독해어휘", context: "We try to rationalize our strong emotional bonds with pets.", meaning: "합리화하다", options: ["합리화하다", "비난하다", "포기하다", "감추다"] },
+                    { word: "abandoning", type: "독해어휘", context: "Abandoning a dangerous climb is a wise decision.", meaning: "포기하는 것, 단념", options: ["포기하는 것, 단념", "시작하는 것", "지속하는 것", "계획하는 것"] },
+                    { word: "surface", type: "독해어휘", context: "Open dialog helps surface hidden thoughts and concerns.", meaning: "수면 위로 드러내다", options: ["수면 위로 드러내다", "숨기다", "파괴하다", "왜곡하다"] },
+                    { word: "alienate", type: "독해어휘", context: "Harsh criticism will alienate family members.", meaning: "소외시키다, 멀리하다", options: ["소외시키다, 멀리하다", "환영하다", "보호하다", "칭찬하다"] },
+                    { word: "precaution", type: "독해어휘", context: "Climbers must take strict precautions against bad weather.", meaning: "예방 조치, 경계", options: ["예방 조치, 경계", "무모함", "위험 요소", "결과"] },
+                    { word: "compliance", type: "독해어휘", context: "Forced compliance rarely brings long-term behavioral change.", meaning: "순응, 복종", options: ["순응, 복종", "저항", "독립", "창의성"] },
+                    { word: "bond", type: "독해어휘", context: "Animals form a strong emotional bond with humans.", meaning: "유대감, 결속", options: ["유대감, 결속", "단절", "경쟁", "의심"] },
+                    { word: "vulnerable", type: "독해어휘", context: "In mountain climbing, one mistake leaves you vulnerable.", meaning: "취약한, 상처받기 쉬운", options: ["취약한, 상처받기 쉬운", "안전한", "강인한", "무적의"] },
+                    { word: "empathy", type: "독해어휘", context: "Effective parent-child communication requires true empathy.", meaning: "공감, 감정이입", options: ["공감, 감정이입", "무관심", "적개심", "동정심"] },
+                    { word: "unconditional", type: "독해어휘", context: "Pets often give unconditional affection to humans.", meaning: "무조건적인, 절대적인", options: ["무조건적인, 절대적인", "조건부의", "일시적인", "제한된"] },
+                    { word: "confrontation", type: "독해어휘", context: "Asking supportive questions avoids aggressive confrontation.", meaning: "대립, 직면", options: ["대립, 직면", "화해", "협력", "도피"] },
+                    { word: "terrain", type: "독해어휘", context: "Check the mountain terrain thoroughly before hiking.", meaning: "지형, 지역", options: ["지형, 지역", "기상", "장비", "식량"] },
+                    { word: "attachment", type: "독해어휘", context: "The deep emotional attachment to pets improves health.", meaning: "애착, 애정", options: ["애착, 애정", "증오", "분리", "무관심"] },
+                    { word: "compromise", type: "독해어휘", context: "Resolving conflict often demands mutual compromise.", meaning: "타협, 절충", options: ["타협, 절충", "고집", "승리", "항복"] }
+                ]
+            },
+            reading_3: {
+                title: "독해 3세트: 멘탈 훈련 / 비밀 누설 / 지리 (20문항)",
+                badge: "독해 Part 3",
+                questions: [
+                    { word: "fortification", type: "독해어휘", context: "Mental imagery provides emotional fortification under stress.", meaning: "강화, 무장", options: ["강화, 무장", "약화", "불안", "파괴"] },
+                    { word: "at the outset", type: "독해숙어", context: "Visualization may feel strange at the outset.", meaning: "처음에, 시초에", options: ["처음에, 시초에", "마지막에", "도중에", "갑자기"] },
+                    { word: "conviction", type: "독해어휘", context: "Speak with conviction to inspire confidence in others.", meaning: "확신, 신념", options: ["확신, 신념", "의심", "두려움", "지루함"] },
+                    { word: "let the cat out of the bag", type: "독해숙어", context: "He accidentally let the cat out of the bag about the surprise.", meaning: "비밀을 누설하다", options: ["비밀을 누설하다", "고양이를 구출하다", "사기를 치다", "거래를 취소하다"] },
+                    { word: "forbid", type: "독해어휘", context: "Strict laws forbid leaking classified information.", meaning: "금지하다", options: ["금지하다", "허용하다", "장려하다", "홍보하다"] },
+                    { word: "underestimate", type: "독해어휘", context: "Never underestimate the geopolitical impact of geography.", meaning: "과소평가하다", options: ["과소평가하다", "과대평가하다", "칭찬하다", "무시하다"] },
+                    { word: "underpin", type: "독해어휘", context: "Geographical facts underpin international relations.", meaning: "뒷받침하다, 근간이 되다", options: ["뒷받침하다, 근간이 되다", "방해하다", "파괴하다", "감추다"] },
+                    { word: "disregard", type: "독해어휘", context: "Leaders who disregard geography face severe setbacks.", meaning: "무시하다, 소홀히 하다", options: ["무시하다, 소홀히 하다", "존중하다", "연구하다", "기록하다"] },
+                    { word: "obstacle", type: "독해어휘", context: "Mountain ranges create natural physical obstacles.", meaning: "장애물, 걸림돌", options: ["장애물, 걸림돌", "지름길", "도움", "목표"] },
+                    { word: "terrified", type: "독해어휘", context: "When terrified, people react instinctively without logic.", meaning: "겁에 질린, 무서워하는", options: ["겁에 질린, 무서워하는", "평온한", "기쁜", "지루한"] },
+                    { word: "visualization", type: "독해어휘", context: "Athletes use mental visualization to boost performance.", meaning: "시각화, 마음속 구상", options: ["시각화, 마음속 구상", "실제 훈련", "체력 검사", "휴식"] },
+                    { word: "confidential", type: "독해어휘", context: "Keep these documents highly confidential at all costs.", meaning: "기밀의, 비밀의", options: ["기밀의, 비밀의", "공개된", "일반적인", "무의미한"] },
+                    { word: "geopolitics", type: "독해어휘", context: "Geopolitics studies how location shapes world strategy.", meaning: "지정학", options: ["지정학", "지질학", "기상학", "인구학"] },
+                    { word: "barrier", type: "독해어휘", context: "Language differences can form a formidable barrier.", meaning: "장벽, 방해물", options: ["장벽, 방해물", "통로", "다리", "안내서"] },
+                    { word: "disclose", type: "독해어휘", context: "Refuse to disclose sensitive personal details online.", meaning: "밝히다, 폭로하다", options: ["밝히다, 폭로하다", "숨기다", "수정하다", "삭제하다"] },
+                    { word: "strategic", type: "독해어휘", context: "Control over the narrow river provided a strategic advantage.", meaning: "전략적인", options: ["전략적인", "우연한", "무해한", "비효율적인"] },
+                    { word: "adversity", type: "독해어휘", context: "Mental preparation empowers people to face adversity.", meaning: "역경, 시련", options: ["역경, 시련", "행운", "풍요", "평화"] },
+                    { word: "inevitable", type: "독해어휘", context: "Geographical constraints make conflicts seem inevitable.", meaning: "피할 수 없는, 불가피한", options: ["피할 수 없는, 불가피한", "선택 가능한", "우연한", "드문"] },
+                    { word: "spill the beans", type: "독해숙어", context: "Do not spill the beans before the official announcement.", meaning: "비밀을 털어놓다", options: ["비밀을 털어놓다", "음식을 쏟다", "거짓말을 하다", "행사를 연기하다"] },
+                    { word: "resilient", type: "독해어휘", context: "Visualization training builds a resilient mindset.", meaning: "회복력 있는, 회복 빠른", options: ["회복력 있는, 회복 빠른", "쉽게 부서지는", "둔감한", "변덕스러운"] }
+                ]
+            }
+        };
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSound(type) {
+            if (isMuted) return;
+            initAudio();
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'correct') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(523.25, now);
+                osc.frequency.setValueAtTime(659.25, now + 0.1);
+                osc.frequency.setValueAtTime(783.99, now + 0.2);
+                osc.frequency.setValueAtTime(1046.50, now + 0.3);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            } else if (type === 'wrong') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.setValueAtTime(180, now + 0.15);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            } else if (type === 'tick') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+                osc.start(now);
+                osc.stop(now + 0.05);
+            } else if (type === 'click') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            }
+        }
+
+        function startBGM() {
+            if (isMuted || bgmInterval) return;
+            initAudio();
+
+            const notes = [261.63, 329.63, 392.00, 523.25, 392.00, 329.63];
+            let noteIdx = 0;
+
+            bgmInterval = setInterval(() => {
+                if (isMuted) return;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(notes[noteIdx], audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.4);
+
+                noteIdx = (noteIdx + 1) % notes.length;
+            }, 500);
+        }
+
+        function stopBGM() {
+            if (bgmInterval) {
+                clearInterval(bgmInterval);
+                bgmInterval = null;
+            }
+        }
+
+        function toggleMute() {
+            isMuted = !isMuted;
+            const btn = document.getElementById("mute-btn");
+            if (isMuted) {
+                btn.innerHTML = `<i class="fa-solid fa-volume-xmark text-red-500"></i>`;
+                stopBGM();
+            } else {
+                btn.innerHTML = `<i class="fa-solid fa-volume-high text-emerald-600"></i>`;
+                startBGM();
+            }
+        }
+
+        function selectSet(setKey) {
+            studentName = document.getElementById("student-name").value.trim();
+            if (!studentName) {
+                alert("학생 이름을 입력해주세요!");
+                document.getElementById("student-name").focus();
+                return;
+            }
+
+            currentSetKey = setKey;
+            currentQuestions = QUIZ_SETS[setKey].questions;
+            currentIdx = 0;
+            score = 0;
+            attemptsCount = 0;
+            startTime = new Date();
+
+            document.getElementById("set-selection-screen").classList.add("hidden");
+            document.getElementById("quiz-screen").classList.remove("hidden");
+            document.getElementById("quiz-set-title").innerText = QUIZ_SETS[setKey].title;
+
+            startBGM();
+            loadQuestion();
+        }
+
+        function loadQuestion() {
+            if (currentIdx >= currentQuestions.length) {
+                finishQuiz();
+                return;
+            }
+
+            const q = currentQuestions[currentIdx];
+            wrongAttemptsPerQuestion = 0;
+            
+            document.getElementById("skip-btn").classList.add("hidden");
+            document.getElementById("feedback-msg").classList.add("hidden");
+            document.getElementById("quiz-card").className = "bg-white/95 backdrop-blur rounded-3xl p-6 md:p-8 shadow-2xl transition-all duration-300";
+            
+            const percent = ((currentIdx) / currentQuestions.length) * 100;
+            document.getElementById("progress-bar").style.width = percent + "%";
+            document.getElementById("progress-text").innerText = `${currentIdx + 1} / ${currentQuestions.length}`;
+
+            document.getElementById("q-type").innerText = q.type || "단어/숙어";
+            document.getElementById("q-word").innerText = q.word;
+            document.getElementById("q-context").innerText = `"${q.context}"`;
+
+            const optionsContainer = document.getElementById("options-container");
+            optionsContainer.innerHTML = "";
+            
+            const shuffledOptions = [...q.options].sort(() => Math.random() - 0.5);
+
+            shuffledOptions.forEach((opt) => {
+                const btn = document.createElement("button");
+                btn.className = "game-btn bg-slate-50 hover:bg-amber-100 text-slate-800 font-bold p-4 rounded-2xl border-2 border-slate-200 hover:border-amber-400 text-left text-base md:text-lg transition flex items-center justify-between shadow-sm active:scale-95";
+                btn.innerHTML = `<span>${opt}</span><i class="fa-regular fa-circle-check text-slate-300 opacity-0 group-hover:opacity-100 transition"></i>`;
+                btn.onclick = () => checkAnswer(opt, btn);
+                optionsContainer.appendChild(btn);
+            });
+
+            startTimer();
+        }
+
+        function checkAnswer(selectedOpt, btnElement) {
+            clearInterval(timer);
+            attemptsCount++;
+            
+            const q = currentQuestions[currentIdx];
+            const isCorrect = (selectedOpt === q.meaning);
+
+            if (isCorrect) {
+                playSound('correct');
+                score++;
+                
+                btnElement.className = "game-btn bg-emerald-500 text-white font-bold p-4 rounded-2xl border-2 border-emerald-600 text-left text-base md:text-lg transition flex items-center justify-between shadow-lg";
+                
+                showPraise();
+                
+                setTimeout(() => {
+                    currentIdx++;
+                    loadQuestion();
+                }, 1200);
+
+            } else {
+                btnElement.className = "game-btn bg-red-100 text-red-600 font-bold p-4 rounded-2xl border-2 border-red-300 text-left text-base md:text-lg transition flex items-center justify-between opacity-60";
+                btnElement.disabled = true;
+
+                handleWrongAnswer("아쉽네요! 정답이 아닙니다.");
+            }
+        }
+
+        function handleWrongAnswer(messageText) {
+            playSound('wrong');
+            wrongAttemptsPerQuestion++;
+
+            const feedback = document.getElementById("feedback-msg");
+            const quizCard = document.getElementById("quiz-card");
+
+            quizCard.classList.add("animate-shake", "border-red-400");
+            setTimeout(() => quizCard.classList.remove("animate-shake"), 500);
+
+            feedback.className = "mt-4 p-3 bg-red-100 border border-red-300 text-red-700 font-bold text-center rounded-xl text-sm md:text-base";
+            
+            if (wrongAttemptsPerQuestion >= 2) {
+                feedback.innerText = `${messageText} (2회 이상 틀렸습니다. 건너뛸 수 있습니다!)`;
+                document.getElementById("skip-btn").classList.remove("hidden");
+            } else {
+                feedback.innerText = `${messageText} 다시 시도해보세요! (틀린 횟수: ${wrongAttemptsPerQuestion}/2)`;
+            }
+            
+            feedback.classList.remove("hidden");
+            startTimer();
+        }
+
+        function skipQuestion() {
+            clearInterval(timer);
+            playSound('click');
+            currentIdx++;
+            loadQuestion();
+        }
+
+        function startTimer() {
+            clearInterval(timer);
+            timeLeft = 10;
+            document.getElementById("timer-text").innerText = timeLeft;
+            
+            const timerCircle = document.getElementById("timer-circle");
+            timerCircle.style.borderColor = "#10b981";
+
+            timer = setInterval(() => {
+                timeLeft--;
+                document.getElementById("timer-text").innerText = timeLeft;
+
+                if (timeLeft <= 3) {
+                    timerCircle.style.borderColor = "#ef4444";
+                    playSound('tick');
+                }
+
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    attemptsCount++;
+                    handleWrongAnswer("시간이 초과되었습니다!");
+                }
+            }, 1000);
+        }
+
+        function showPraise() {
+            const praises = [
+                "🎉 대단해요! 완벽합니다!",
+                "⭐ 최고예요! 훌륭해요!",
+                "🔥 폭풍 성장 중! 멋집니다!",
+                "👏 정답입니다! 계속 가보죠!",
+                "💯 대단한 실력이네요!"
+            ];
+            const randomPraise = praises[Math.floor(Math.random() * praises.length)];
+            
+            const toast = document.createElement("div");
+            toast.className = "fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-amber-400 text-slate-900 font-jua text-2xl md:text-3xl px-8 py-4 rounded-3xl shadow-2xl z-50 animate-bounce pulse-glow border-4 border-white";
+            toast.innerText = randomPraise;
+            document.body.appendChild(toast);
+
+            if (typeof confetti === 'function') {
+                confetti({
+                    particleCount: 50,
+                    spread: 60,
+                    origin: { y: 0.6 }
+                });
+            }
+
+            setTimeout(() => {
+                toast.remove();
+            }, 1000);
+        }
+
+        function finishQuiz() {
+            clearInterval(timer);
+            stopBGM();
+
+            const endTime = new Date();
+            const timeDiff = Math.round((endTime - startTime) / 1000);
+
+            document.getElementById("quiz-screen").classList.add("hidden");
+            document.getElementById("result-screen").classList.remove("hidden");
+
+            const accuracy = Math.round((score / currentQuestions.length) * 100);
+            
+            document.getElementById("res-name").innerText = studentName;
+            document.getElementById("res-score").innerText = `${score} / ${currentQuestions.length}`;
+            document.getElementById("res-accuracy").innerText = `${accuracy}%`;
+            document.getElementById("res-time").innerText = `${timeDiff}초`;
+
+            saveResultToTeacherData({
+                name: studentName,
+                setTitle: QUIZ_SETS[currentSetKey].title,
+                score: score,
+                total: currentQuestions.length,
+                attempts: attemptsCount,
+                accuracy: accuracy,
+                timeSeconds: timeDiff,
+                date: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+            });
+        }
+
+        function saveResultToTeacherData(record) {
+            let records = JSON.parse(localStorage.getItem("voca_teacher_data") || "[]");
+            records.unshift(record);
+            localStorage.setItem("voca_teacher_data", JSON.stringify(records));
+        }
+
+        function showTeacherDashboard() {
+            const records = JSON.parse(localStorage.getItem("voca_teacher_data") || "[]");
+            const tbody = document.getElementById("teacher-data-body");
+            tbody.innerHTML = "";
+
+            if (records.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">아직 제출된 학생 기록이 없습니다.</td></tr>`;
+            } else {
+                records.forEach((r) => {
+                    const tr = document.createElement("tr");
+                    tr.className = "border-b border-slate-100 hover:bg-slate-50";
+                    tr.innerHTML = `
+                        <td class="p-3 font-bold text-slate-800">${r.name}</td>
+                        <td class="p-3 text-slate-600 text-sm">${r.setTitle}</td>
+                        <td class="p-3 font-bold text-emerald-600">${r.score} / ${r.total}</td>
+                        <td class="p-3 text-slate-600">${r.accuracy}%</td>
+                        <td class="p-3 text-slate-600">${r.timeSeconds}초</td>
+                        <td class="p-3 text-slate-400 text-xs">${r.date}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            document.getElementById("teacher-modal").classList.remove("hidden");
+        }
+
+        function closeTeacherDashboard() {
+            document.getElementById("teacher-modal").classList.add("hidden");
+        }
+
+        function clearTeacherData() {
+            if (confirm("모든 학생 참여 기록을 삭제하시겠습니까?")) {
+                localStorage.removeItem("voca_teacher_data");
+                showTeacherDashboard();
+            }
+        }
+
+        function restartQuiz() {
+            document.getElementById("result-screen").classList.add("hidden");
+            document.getElementById("set-selection-screen").classList.remove("hidden");
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-br from-amber-200 via-orange-300 to-rose-300 min-h-screen font-sans antialiased text-slate-800 flex flex-col justify-between p-4 md:p-8">
+
+    <header class="max-w-4xl mx-auto w-full flex items-center justify-between bg-white/80 backdrop-blur-md px-6 py-4 rounded-2xl shadow-lg border border-white/50 mb-6">
+        <div class="flex items-center space-x-3">
+            <span class="bg-amber-500 text-white p-2 rounded-xl text-xl shadow"><i class="fa-solid fa-gamepad"></i></span>
+            <h1 class="font-jua text-2xl md:text-3xl text-slate-800 tracking-wide">Voca Quiz Challenge</h1>
+        </div>
+        <div class="flex items-center space-x-3">
+            <button id="mute-btn" onclick="toggleMute()" class="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition shadow-sm text-lg" title="배경음악 켜기/끄기">
+                <i class="fa-solid fa-volume-high text-emerald-600"></i>
+            </button>
+            <button onclick="showTeacherDashboard()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-sm transition shadow-md flex items-center space-x-2">
+                <i class="fa-solid fa-user-check"></i>
+                <span>교사용 확인</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-3xl mx-auto w-full flex-grow flex items-center justify-center">
+
+        <!-- 1. Student Name & Set Selection Screen -->
+        <div id="set-selection-screen" class="w-full bg-white/90 backdrop-blur rounded-3xl p-6 md:p-10 shadow-2xl border border-white/60">
+            <div class="text-center mb-8">
+                <span class="inline-block bg-amber-100 text-amber-800 text-xs md:text-sm font-bold px-4 py-1.5 rounded-full mb-3 uppercase tracking-wider">Interactive Vocabulary Quiz</span>
+                <h2 class="font-jua text-3xl md:text-4xl text-slate-900 mb-2">단어/숙어 퀴즈 세트 선택</h2>
+                <p class="text-slate-600 text-sm md:text-base">이름을 입력한 후 참가할 퀴즈 세트를 선택해 주세요 (세트당 20문항)</p>
+            </div>
+
+            <!-- Student Name Input -->
+            <div class="mb-8 max-w-md mx-auto">
+                <label for="student-name" class="block text-sm font-bold text-slate-700 mb-2 flex items-center space-x-1">
+                    <i class="fa-solid fa-user text-amber-500"></i>
+                    <span>학생 이름 (필수):</span>
+                </label>
+                <input type="text" id="student-name" placeholder="예: 홍길동" class="w-full text-lg p-4 rounded-2xl border-2 border-slate-200 focus:border-amber-400 focus:outline-none transition shadow-inner bg-slate-50">
+            </div>
+
+            <!-- Quiz Sets Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Textbook Card -->
+                <button onclick="selectSet('textbook')" class="group text-left p-5 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 hover:border-amber-400 transition hover:shadow-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="bg-amber-500 text-white font-bold text-xs px-2.5 py-1 rounded-lg">교과서 핵심</span>
+                            <span class="text-xs font-bold text-amber-700">20문항</span>
+                        </div>
+                        <h3 class="font-jua text-xl text-slate-800 mb-1 group-hover:text-amber-600 transition">Lesson 2. Scientific Discovery</h3>
+                        <p class="text-xs text-slate-500">신규 어휘 리스트 반영 주요 어휘 및 숙어</p>
+                    </div>
+                    <div class="mt-4 flex justify-end">
+                        <span class="text-amber-600 font-bold text-sm group-hover:translate-x-1 transition flex items-center space-x-1">
+                            <span>시작하기</span>
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </span>
+                    </div>
+                </button>
+
+                <!-- Reading 1 Card -->
+                <button onclick="selectSet('reading_1')" class="group text-left p-5 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-200 hover:border-emerald-400 transition hover:shadow-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="bg-emerald-500 text-white font-bold text-xs px-2.5 py-1 rounded-lg">독해 Part 1</span>
+                            <span class="text-xs font-bold text-emerald-700">20문항</span>
+                        </div>
+                        <h3 class="font-jua text-xl text-slate-800 mb-1 group-hover:text-emerald-600 transition">소셜미디어 / 몰입 / 언어학습</h3>
+                        <p class="text-xs text-slate-500">Reading Booster Passages 20, 21, 22 확대</p>
+                    </div>
+                    <div class="mt-4 flex justify-end">
+                        <span class="text-emerald-600 font-bold text-sm group-hover:translate-x-1 transition flex items-center space-x-1">
+                            <span>시작하기</span>
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </span>
+                    </div>
+                </button>
+
+                <!-- Reading 2 Card -->
+                <button onclick="selectSet('reading_2')" class="group text-left p-5 rounded-2xl bg-gradient-to-r from-sky-50 to-indigo-50 border-2 border-sky-200 hover:border-sky-400 transition hover:shadow-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="bg-sky-500 text-white font-bold text-xs px-2.5 py-1 rounded-lg">독해 Part 2</span>
+                            <span class="text-xs font-bold text-sky-700">20문항</span>
+                        </div>
+                        <h3 class="font-jua text-xl text-slate-800 mb-1 group-hover:text-sky-600 transition">산악 안전 / 소통 / 반려동물</h3>
+                        <p class="text-xs text-slate-500">Reading Booster Passages 23, 24, 29 확대</p>
+                    </div>
+                    <div class="mt-4 flex justify-end">
+                        <span class="text-sky-600 font-bold text-sm group-hover:translate-x-1 transition flex items-center space-x-1">
+                            <span>시작하기</span>
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </span>
+                    </div>
+                </button>
+
+                <!-- Reading 3 Card -->
+                <button onclick="selectSet('reading_3')" class="group text-left p-5 rounded-2xl bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 hover:border-purple-400 transition hover:shadow-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="bg-purple-500 text-white font-bold text-xs px-2.5 py-1 rounded-lg">독해 Part 3</span>
+                            <span class="text-xs font-bold text-purple-700">20문항</span>
+                        </div>
+                        <h3 class="font-jua text-xl text-slate-800 mb-1 group-hover:text-purple-600 transition">멘탈 훈련 / 비밀 누설 / 지리</h3>
+                        <p class="text-xs text-slate-500">Reading Booster Passages 30, 32, 40 확대</p>
+                    </div>
+                    <div class="mt-4 flex justify-end">
+                        <span class="text-purple-600 font-bold text-sm group-hover:translate-x-1 transition flex items-center space-x-1">
+                            <span>시작하기</span>
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </span>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. Quiz Play Screen -->
+        <div id="quiz-screen" class="hidden w-full">
+            <div class="flex items-center justify-between mb-4 px-2">
+                <span id="quiz-set-title" class="font-bold text-slate-800 text-sm md:text-base">Quiz Title</span>
+                <span id="progress-text" class="font-jua text-lg text-amber-900 bg-white/70 px-3 py-1 rounded-full shadow-sm">1 / 20</span>
+            </div>
+
+            <div class="w-full bg-white/50 h-3 rounded-full mb-6 overflow-hidden p-0.5 shadow-inner">
+                <div id="progress-bar" class="bg-amber-500 h-full rounded-full transition-all duration-300" style="width: 5%;"></div>
+            </div>
+
+            <div id="quiz-card" class="bg-white/95 backdrop-blur rounded-3xl p-6 md:p-8 shadow-2xl transition-all duration-300">
+                <div class="flex items-center justify-between mb-4">
+                    <span id="q-type" class="bg-amber-100 text-amber-800 text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider">단어</span>
+                    <div id="timer-circle" class="w-12 h-12 rounded-full border-4 border-emerald-500 flex items-center justify-center font-black text-lg bg-white text-slate-800 transition-all duration-300 shadow-inner">
+                        <span id="timer-text">10</span>
+                    </div>
+                </div>
+
+                <div class="text-center mb-6">
+                    <h2 id="q-word" class="text-3xl md:text-4xl font-black text-slate-900 mb-2 drop-shadow-sm">word</h2>
+                    <p id="q-context" class="text-sm md:text-base text-slate-600 italic font-medium bg-slate-50 p-3 rounded-xl border border-slate-200">"Context sentence goes here..."</p>
+                </div>
+
+                <div id="feedback-msg" class="hidden mb-4 p-3 bg-red-100 border border-red-300 text-red-700 font-bold text-center rounded-xl text-sm"></div>
+
+                <div id="options-container" class="grid gap-3"></div>
+
+                <button id="skip-btn" onclick="skipQuestion()" class="hidden mt-4 w-full bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg transition flex items-center justify-center space-x-2">
+                    <span>다음 문제로 넘어가기 (건너뛰기)</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 3. Quiz Completion Screen -->
+        <div id="result-screen" class="hidden w-full bg-white/95 backdrop-blur rounded-3xl p-8 md:p-12 shadow-2xl text-center">
+            <div class="inline-flex p-4 rounded-full bg-amber-100 text-amber-500 text-4xl mb-4 animate-bounce-short">
+                <i class="fa-solid fa-trophy"></i>
+            </div>
+            <h2 class="font-jua text-3xl md:text-4xl text-slate-900 mb-2">수고하셨습니다!</h2>
+            <p class="text-slate-600 mb-8"><span id="res-name" class="font-bold text-slate-800">학생</span>님의 퀴즈 결과입니다.</p>
+
+            <div class="grid grid-cols-3 gap-4 mb-8">
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <span class="block text-xs font-bold text-slate-400 mb-1">맞힌 개수</span>
+                    <span id="res-score" class="font-jua text-2xl md:text-3xl text-emerald-600">20 / 20</span>
+                </div>
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <span class="block text-xs font-bold text-slate-400 mb-1">정답률</span>
+                    <span id="res-accuracy" class="font-jua text-2xl md:text-3xl text-amber-600">100%</span>
+                </div>
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <span class="block text-xs font-bold text-slate-400 mb-1">소요 시간</span>
+                    <span id="res-time" class="font-jua text-2xl md:text-3xl text-indigo-600">45초</span>
+                </div>
+            </div>
+
+            <button onclick="restartQuiz()" class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-jua text-xl py-4 px-8 rounded-2xl shadow-xl transition transform active:scale-95 flex items-center justify-center space-x-2 mx-auto">
+                <i class="fa-solid fa-rotate-right"></i>
+                <span>다른 세트 도전하기</span>
+            </button>
+        </div>
+
+    </main>
+
+    <!-- Teacher Dashboard Modal -->
+    <div id="teacher-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-2xl w-full p-6 md:p-8 shadow-2xl max-h-[85vh] flex flex-col">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-clipboard-check text-indigo-600 text-2xl"></i>
+                    <h3 class="font-jua text-2xl text-slate-800">교사용 학생 참여 현황</h3>
+                </div>
+                <button onclick="closeTeacherDashboard()" class="text-slate-400 hover:text-slate-600 text-xl p-2">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="overflow-y-auto flex-grow mb-4 rounded-xl border border-slate-100">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-slate-50 sticky top-0 text-xs font-bold text-slate-500 uppercase">
+                        <tr>
+                            <th class="p-3">이름</th>
+                            <th class="p-3">퀴즈 세트</th>
+                            <th class="p-3">점수</th>
+                            <th class="p-3">정답률</th>
+                            <th class="p-3">시간</th>
+                            <th class="p-3">제출 시각</th>
+                        </tr>
+                    </thead>
+                    <tbody id="teacher-data-body" class="text-sm">
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+                <button onclick="clearTeacherData()" class="text-xs text-red-500 hover:underline">기록 전체 삭제</button>
+                <button onclick="closeTeacherDashboard()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="text-center text-slate-600 text-xs mt-6">
+        High School English II & Reading Booster Voca Quiz Challenge Application
+    </footer>
+
+</body>
+</html>
